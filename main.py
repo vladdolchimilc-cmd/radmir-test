@@ -426,7 +426,7 @@ async def handle_submit(
     is_passed = score_percent >= PASS_SCORE_PERCENT
     status_text = "🟢 УСПЕШНО (Тест сдан)" if is_passed else "🔴 ПРОВАЛЕН (Недостаточно баллов)"
 
-    # Генерируем лог для Telegram
+    # Формируем лог для Telegram
     tg_message = (
         f"<b>📥 ПОСТУПИЛ НОВЫЙ ПРОТОКОЛ ТЕСТА</b>\n"
         f"-------------------------------------\n"
@@ -441,12 +441,26 @@ async def handle_submit(
     written_html = ""
     for q in TEXT_QUESTIONS:
         ans = form_data.get(f"q_{q['id']}", "Нет ответа")
-        written_html += f"<div style='margin-bottom:15px; padding:10px; background:#101116; border-left:3px solid #ff4500;'><p style='color:#ff4500; margin:0;'><b>{q['text']}</b></p><p style='margin:5px 0 0 0; color:#fff;'><i>Ответ: {ans}</i></p></div>"
-        tg_message += f"\n❓ <i>{q['text']}</i>\n✍️ <b>Ответ:</b> {ans}\n"
+        # Экранируем спецсимволы HTML для корректного отображения на сайте
+        ans_clean = ans.replace("<", "&lt;").replace(">", "&gt;")
+        written_html += f"<div style='margin-bottom:15px; padding:10px; background:#101116; border-left:3px solid #ff4500;'><p style='color:#ff4500; margin:0;'><b>{q['text']}</b></p><p style='margin:5px 0 0 0; color:#fff;'><i>Ответ: {ans_clean}</i></p></div>"
+        
+        # Для Telegram убираем HTML теги из ответов пользователя, чтобы избежать конфликтов форматирования
+        tg_ans = ans.replace("<", "").replace(">", "")
+        tg_message += f"\n❓ <i>{q['text']}</i>\n✍️ <b>Ответ:</b> {tg_ans}\n"
 
-    # Отправляем лог в телеграм
-    await send_to_telegram(tg_message)
+    # БЕЗОПАСНАЯ ОТПРАВКА В ТЕЛЕГРАМ
+    # Даже если токен неверный или упал интернет — сайт НЕ выдаст ошибку 500
+    try:
+        url = f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage"
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(url, json={"chat_id": TG_CHAT_ID, "text": tg_message, "parse_mode": "HTML"})
+            if response.status_code != 200:
+                print(f"Ошибка API Telegram: {response.text}")
+    except Exception as e:
+        print(f"Критическая ошибка отправки в ТГ: {e}")
 
+    # Финальная страница (покажется 100%)
     result_html = f"""
     <!DOCTYPE html>
     <html>
@@ -465,6 +479,3 @@ async def handle_submit(
     </html>
     """
     return HTMLResponse(content=result_html)
-
-if __name__ == "__main__":
-    uvicorn.run(app, host="127.0.0.1", port=8000)
