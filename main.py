@@ -1,4 +1,5 @@
 import time
+import httpx
 import uvicorn
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse
@@ -10,67 +11,156 @@ FRACTIONS = [
     "Правительство", "МЧС", "ТРК (Ритм)", "ФСИН"
 ]
 
-# Тестовые вопросы
+# 10 Жестких тестовых вопросов по твоим правилам
 CHOICE_QUESTIONS = [
     {
         "id": 1,
-        "text": "Каков минимальный игровой уровень для занятия поста заместителя?",
-        "options": ["5 уровень", "10 уровень", "15 уровень", "Нет ограничений"],
-        "correct": "10 уровень"
+        "text": "Каковы минимальные требования к оформлению правильной команды /try?",
+        "options": [
+            "С большой буквы и с точкой на конце",
+            "С маленькой буквы и без точки на конце",
+            "Без вопросительных знаков или иных знаков пунктуации (. , ? ! : )",
+            "С обязательным знаком вопроса на конце"
+        ],
+        "correct": "Без вопросительных знаков или иных знаков пунктуации (. , ? ! : )"
     },
     {
         "id": 2,
-        "text": "Что обязан сделать заместитель при уходе со своего поста ПСЖ, если не отстоял минимальный срок (7 дней)?",
-        "options": ["Ничего, это право игрока", "Получить варн или бан", "Заплатить штраф лидеру", "Понизиться на 1 ранг"],
-        "correct": "Получить варн или бан"
+        "text": "Каковы минимальные требования к длительности и объему скриншотов для зачета обычной RP ситуации?",
+        "options": [
+            "Минимум 5 скриншотов и 5 минут длительности",
+            "Минимум 7 скриншотов и не менее 10 минут длительности по /c 60",
+            "Достаточно 3 скриншотов без учета времени",
+            "Минимум 10 скриншотов и 20 минут длительности"
+        ],
+        "correct": "Минимум 7 скриншотов и не менее 10 минут длительности по /c 60"
     },
     {
         "id": 3,
-        "text": "Каков минимальный интервал между подачей своих строк в государственную волну (/gov) одной организации?",
-        "options": ["3 минуты", "5 минут", "10 минут", "15 минут"],
-        "correct": "10 минут"
+        "text": "Каков максимальный срок хранения скриншотов для подачи отчетов в государственные структуры?",
+        "options": ["24 часа (1 день)", "48 часов (2 дня)", "72 часа (3 дня)", "7 дней"]
     },
     {
         "id": 4,
-        "text": "Какое максимальное количество заместителей (9 рангов) может быть в организации одновременно?",
-        "options": ["1", "2", "3", "4"],
-        "correct": "3"
+        "text": "В какое время разрешено проводить плановые и повторные проверки организаций?",
+        "options": [
+            "В любое время в течение рабочего дня",
+            "Строго с 14:00 до конца рабочего дня",
+            "С 10:00 до 18:00",
+            "Только во время обеденного перерыва"
+        ],
+        "correct": "Строго с 14:00 до конца рабочего дня"
     },
     {
         "id": 5,
-        "text": "Разрешено ли использовать нецензурную брань (мат) в чат департамента (/d)?",
-        "options": ["Да, в рамках RP процесса", "Запрещено в любом виде (как в IC, так и в OOC)", "Разрешено, если закрыть тему через (())", "Разрешено только лидеру"],
-        "correct": "Запрещено в любом виде (как в IC, так и в OOC)"
-    }
-]
-
-# Письменные вопросы (будут выведены в конце)
-TEXT_QUESTIONS = [
+        "text": "Какое минимальное количество сотрудников должно быть в сети у обеих организаций для проведения проверки?",
+        "options": [
+            "Минимум 3 сотрудника с каждой стороны",
+            "Минимум 5 сотрудников, включая проводящего",
+            "Минимум 4 человека с обеих сторон (не включая человека, принявшего проверку)",
+            "Ограничений по составу нет, главное присутствие 8+ ранга"
+        ],
+        "correct": "Минимум 4 человека с обеих сторон (не включая человека, принявшего проверку)"
+    },
     {
         "id": 6,
-        "text": "Опишите своими словами, что такое 'Блат' в государственных организациях и как вы будете с ним бороться?"
+        "text": "С какого ранга сотрудникам разрешено пользоваться рацией департамента (/d)?",
+        "options": [
+            "С 5-го ранга (Исключение: ФСИН/ФСБ с 3+ ранга)",
+            "Строго с 8-го ранга для всех фракций",
+            "С 4-го ранга для всех фракций без исключений",
+            "Только Лидеру и его Заместителям (9-10 ранги)"
+        ],
+        "correct": "С 5-го ранга (Исключение: ФСИН/ФСБ с 3+ ранга)"
     },
     {
         "id": 7,
-        "text": "Сформулируйте правила и основные запреты при использовании чата департамента (/d) для заместителей."
+        "text": "Сотрудник МВД собирается провести задержание гражданина. Какое его первое действие по правилам?",
+        "options": [
+            "Сразу надеть наручники и провести обыск",
+            "Обязан запросить документы подозреваемого (Исключение: лично видел нарушение, 5+ звезд, фоторобот)",
+            "Открыть огонь на поражение для обездвиживания",
+            "Выдать розыск по КПК, не приближаясь к игроку"
+        ],
+        "correct": "Обязан запросить документы подозреваемого (Исключение: лично видел нарушение, 5+ звезд, фоторобот)"
     },
     {
         "id": 8,
-        "text": "Расшифруйте термины и приведите примеры нарушений для каждого: SK, TK, RK, PG."
+        "text": "В каких временных рамках разрешено проводить собеседования во фракции по /c 060?",
+        "options": ["Круглосуточно", "С 8:00 до 22:00", "С 7:00 до 00:00", "Строго с 12:00 до 21:00"],
+        "correct": "С 7:00 до 00:00"
+    },
+    {
+        "id": 9,
+        "text": "Какое из указанных действий НЕ является блатом со стороны руководства?",
+        "options": [
+            "Повышение сотрудника на 2 ранга за один день",
+            "Принятие человека на Заместителя по доверию при свободном месте в начале срока (согласовав с адм)",
+            "Восстановление сотрудника на прежний ранг после получения им Warn'а",
+            "Принятие гражданина в организацию в обход ЧС фракции"
+        ],
+        "correct": "Принятие человека на Заместителя по доверию при свободном месте в начале срока (согласовав с адм)"
+    },
+    {
+        "id": 10,
+        "text": "Что произойдет, если заместитель уйдет со своего поста по СЖ, не отстояв минимальный срок (7 дней)?",
+        "options": [
+            "Его просто уволят без наказаний",
+            "Он получит предупреждение (Варн) или Блокировку аккаунта (Бан)",
+            "Ему понизят законопослушность до 0",
+            "Он будет переведен рядовым в Министерство Обороны"
+        ],
+        "correct": "Он получит предупреждение (Варн) или Блокировку аккаунта (Бан)"
+    }
+]
+
+# 5 Сложных письменных ситуаций
+TEXT_QUESTIONS = [
+    {
+        "id": 11,
+        "text": "Ситуация: Вы проводите проверку МЗ. При проверке сан. норм выпало много попыток 'Неудачно', а у одного сотрудника обнаружен розыск. Рассчитайте по правилам из текста, сколько баллов вы отнимете из оценки фракции?"
+    },
+    {
+        "id": 12,
+        "text": "Напишите пример ИДЕАЛЬНОЙ и грамотной цепочки отыгровок команд /me, /do и /try для обыска подозреваемого на наличие запрещенных веществ, строго соблюдая правила регистров и точек."
+    },
+    {
+        "id": 13,
+        "text": "Вам необходимо перевести вещание в гос. волну (/gov). Опишите правила занятия линии: за сколько минут занимается, какой минимальный интервал между вещаниями одной фракции и правила заполнения."
+    },
+    {
+        "id": 14,
+        "text": "Вы стоите на посту Заместителя ТРК 'Ритм'. Старший состав собрал строй, при этом в здании не осталось ни одного сотрудника 2+ ранга для редактирования объявлений, а очередь /edit превысила 15 штук. Каковы ваши действия и какое правило здесь нарушено?"
+    },
+    {
+        "id": 15,
+        "text": "Опишите подробные правила проведения вербовки для силовых структур: со скольки до скольки проводится, со скольких рангов можно вербовать сотрудников МО и каковы правила миграции выговоров при вербовке?"
     }
 ]
 
 PASS_SCORE_PERCENT = 80
+
+# === КОНФИГУРАЦИЯ ТЕЛЕГРАМА ===
+TG_TOKEN = "8731457824:AAHpYQiGSHakpMkoVoGFJQNbF3fe_rimxSU"
+TG_CHAT_ID = "8621189784"
+
+async def send_to_telegram(text: str):
+    url = f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage"
+    async with httpx.AsyncClient() as client:
+        try:
+            await client.post(url, json={"chat_id": TG_CHAT_ID, "text": text, "parse_mode": "HTML"})
+        except Exception as e:
+            print(f"Ошибка отправки в ТГ: {e}")
 
 @app.get("/", response_class=HTMLResponse)
 async def get_test_page():
     start_time = time.time()
     fraction_options = "".join([f"<option value='{f}'>{f}</option>" for f in FRACTIONS])
 
-    # Генерируем карточки для тестовых вопросов
     steps_html = ""
-    step_index = 2  # Шаг 1 — это ввод ника и фракции
+    step_index = 2
 
+    # Тестовые слайды
     for q in CHOICE_QUESTIONS:
         options_html = ""
         for opt in q["options"]:
@@ -81,8 +171,8 @@ async def get_test_page():
             </label>
             """
         steps_html += f"""
-        <div class="step-content" id="step-{step_index}" style="display: none;">
-            <div class="question-header">Вопрос {step_index - 1} из {len(CHOICE_QUESTIONS) + len(TEXT_QUESTIONS)}</div>
+        <div class="step-content animate-slide" id="step-{step_index}" style="display: none;">
+            <div class="question-header">ТЕСТОВАЯ ЧАСТЬ • ВОПРОС {step_index - 1} из {len(CHOICE_QUESTIONS) + len(TEXT_QUESTIONS)}</div>
             <p class="question-text">{q['text']}</p>
             <div class="options-container">{options_html}</div>
             <div class="btn-group">
@@ -93,17 +183,17 @@ async def get_test_page():
         """
         step_index += 1
 
-    # Генерируем карточки для письменных вопросов
+    # Письменные слайды
     for q in TEXT_QUESTIONS:
         steps_html += f"""
-        <div class="step-content" id="step-{step_index}" style="display: none;">
-            <div class="question-header">Письменный вопрос {step_index - 1} из {len(CHOICE_QUESTIONS) + len(TEXT_QUESTIONS)}</div>
-            <p class="question-text">{q['text']}</p>
-            <textarea name="q_{q['id']}" placeholder="Введите ваш развернутый ответ здесь (минимум 20 символов)..." class="text-answer" rows="6"></textarea>
+        <div class="step-content animate-slide" id="step-{step_index}" style="display: none;">
+            <div class="question-header">СИТУАЦИОННЫЙ СЕКТОР • ЗАДАНИЕ {step_index - 1}</div>
+            <p class="question-text" style="color: #ffaa00;">{q['text']}</p>
+            <textarea name="q_{q['id']}" placeholder="Введите развернутый ответ на ситуацию (минимум 30 символов)..." class="text-answer" rows="7"></textarea>
             <div class="btn-group">
                 <button type="button" class="btn btn-secondary" onclick="prevStep({step_index})">Назад</button>
                 {"<button type='button' class='btn btn-primary' onclick='nextStep(" + str(step_index) + ")'>Далее</button>" if step_index < (len(CHOICE_QUESTIONS) + len(TEXT_QUESTIONS) + 1) else ""}
-                {"<button type='submit' class='btn btn-submit'>Завершить тестирование</button>" if step_index == (len(CHOICE_QUESTIONS) + len(TEXT_QUESTIONS) + 1) else ""}
+                {"<button type='submit' class='btn btn-submit'>Зафиксировать протокол в базе</button>" if step_index == (len(CHOICE_QUESTIONS) + len(TEXT_QUESTIONS) + 1) else ""}
             </div>
         </div>
         """
@@ -113,50 +203,46 @@ async def get_test_page():
     <!DOCTYPE html>
     <html>
     <head>
-        <title>ПРОТОКОЛ ТЕСТИРОВАНИЯ | RADMIR RP</title>
+        <title>ТЕРМИНАЛ ПРОВЕРКИ ГОС. СТРУКТУР</title>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>
             body {{
                 font-family: 'Courier New', Courier, monospace;
-                background: #0a0a0f;
+                background: #06060a;
                 color: #00ff66;
                 margin: 0;
                 padding: 20px;
+                overflow-x: hidden;
             }}
             .terminal-container {{
                 max-width: 750px;
                 margin: 40px auto;
-                background: #0f1015;
+                background: #0b0c10;
                 padding: 40px;
-                border-radius: 4px;
-                box-shadow: 0 0 20px rgba(255, 69, 0, 0.15);
-                border: 2px solid #222530;
+                border-radius: 2px;
+                box-shadow: 0 0 30px rgba(255, 69, 0, 0.2);
+                border: 2px solid #1f222e;
+                position: relative;
             }}
             .terminal-header {{
                 text-align: center;
                 margin-bottom: 40px;
-                border-bottom: 2px dashed #222530;
+                border-bottom: 2px dashed #1f222e;
                 padding-bottom: 20px;
             }}
             .terminal-title {{
                 color: #ff4500;
                 margin: 0;
-                font-size: 24px;
+                font-size: 22px;
                 text-transform: uppercase;
                 letter-spacing: 2px;
-                text-shadow: 0 0 10px rgba(255, 69, 0, 0.3);
-            }}
-            .terminal-subtitle {{
-                color: #6c738c;
-                margin-top: 10px;
-                font-size: 13px;
             }}
             .input-field, .select-field {{
                 width: 100%;
                 padding: 14px;
-                background: #14161f;
-                border: 1px solid #303545;
+                background: #101116;
+                border: 1px solid #2a2e3d;
                 border-radius: 4px;
                 color: #fff;
                 font-size: 16px;
@@ -166,42 +252,41 @@ async def get_test_page():
             .input-field:focus, .select-field:focus {{
                 outline: none;
                 border-color: #ff4500;
-                box-shadow: 0 0 8px rgba(255, 69, 0, 0.2);
             }}
             .question-header {{
                 color: #ff4500;
-                font-size: 14px;
-                margin-bottom: 10px;
-                text-transform: uppercase;
+                font-size: 13px;
+                margin-bottom: 15px;
                 letter-spacing: 1px;
             }}
             .question-text {{
-                font-size: 18px;
+                font-size: 17px;
                 color: #fff;
                 margin-top: 0;
                 margin-bottom: 25px;
-                line-height: 1.5;
+                line-height: 1.6;
             }}
             .option-card {{
                 display: flex;
                 align-items: center;
                 margin: 12px 0;
                 padding: 15px;
-                background: #14161f;
-                border: 1px solid #222530;
+                background: #101116;
+                border: 1px solid #1f222e;
                 border-radius: 4px;
                 cursor: pointer;
-                transition: 0.2s;
                 color: #c4c9de;
+                transition: transform 0.2s;
             }}
             .option-card:hover {{
                 border-color: #ff4500;
-                background: #191b26;
+                background: #14161f;
+                transform: translateX(5px);
             }}
             .text-answer {{
                 width: 100%;
-                background: #14161f;
-                border: 1px solid #303545;
+                background: #101116;
+                border: 1px solid #2a2e3d;
                 border-radius: 4px;
                 color: #fff;
                 padding: 15px;
@@ -210,16 +295,8 @@ async def get_test_page():
                 font-family: inherit;
                 resize: none;
             }}
-            .text-answer:focus {{
-                outline: none;
-                border-color: #ff4500;
-            }}
-            .btn-group {{
-                display: flex;
-                justify-content: space-between;
-                margin-top: 30px;
-                gap: 15px;
-            }}
+            .text-answer:focus {{ outline: none; border-color: #ff4500; }}
+            .btn-group {{ display: flex; justify-content: space-between; margin-top: 30px; gap: 15px; }}
             .btn {{
                 padding: 14px 28px;
                 border: none;
@@ -229,51 +306,53 @@ async def get_test_page():
                 cursor: pointer;
                 text-transform: uppercase;
                 font-family: inherit;
-                transition: 0.2s;
             }}
             .btn-primary {{ background: #ff4500; color: #fff; }}
-            .btn-primary:hover {{ background: #e03d00; }}
-            .btn-secondary {{ background: #222530; color: #8a91a8; }}
-            .btn-secondary:hover {{ background: #2d3142; color: #fff; }}
+            .btn-secondary {{ background: #1f222e; color: #8a91a8; }}
             .btn-submit {{ background: #00ff66; color: #000; width: 100%; }}
-            .btn-submit:hover {{ background: #00e65c; }}
-            .form-label {{
-                display: block;
-                margin-bottom: 10px;
-                color: #ff4500;
-                font-size: 14px;
-                text-transform: uppercase;
+            
+            /* КЛЮЧЕВАЯ АНИМАЦИЯ СЛАЙДОВ */
+            .animate-slide {{
+                animation: fadeInSlide 0.4s ease-in-out forwards;
+            }}
+            @keyframes fadeInSlide {{
+                from {{
+                    opacity: 0;
+                    transform: translateY(15px);
+                }}
+                to {{
+                    opacity: 1;
+                    transform: translateY(0);
+                }}
             }}
         </style>
     </head>
     <body>
         <div class="terminal-container">
             <div class="terminal-header">
-                <h2 class="terminal-title">■ ДЕПАРТАМЕНТ КОНТРОЛЯ КАДРОВ ■</h2>
-                <p class="terminal-subtitle">Квалификационный экзамен на руководящую должность (9 ранг)</p>
+                <h2 class="terminal-title">▲ СИСТЕМА ПРОВЕРКИ СТАРШЕГО СОСТАВА ▲</h2>
+                <p style="color: #6c738c; font-size: 12px; margin: 5px 0 0 0;">БАЗА ДАННЫХ И ПРАВИЛА ГОСУДАРСТВЕННЫХ СТРУКТУР RADMIR</p>
             </div>
             
             <form action="/submit" method="post" id="quiz-form">
                 <input type="hidden" name="start_time" value="{start_time}">
 
-                <!-- ШАГ 1: АВТОРИЗАЦИЯ -->
-                <div class="step-content" id="step-1">
+                <div class="step-content animate-slide" id="step-1">
                     <div style="margin-bottom: 25px;">
-                        <label class="form-label">> Идентификация кандидата (Никнейм):</label>
-                        <input type="text" id="nick-input" name="nickname" placeholder="Имя_Фамилия" required class="input-field">
+                        <label style="display:block; margin-bottom:10px; color:#ff4500;">> Авторизовать никнейм (Имя_Фамилия):</label>
+                        <input type="text" id="nick-input" name="nickname" placeholder="Dmitry_Kabanov" required class="input-field">
                     </div>
                     
                     <div style="margin-bottom: 35px;">
-                        <label class="form-label">> Ведомственная структура (Организация):</label>
+                        <label style="display:block; margin-bottom:10px; color:#ff4500;">> Выберите ведомство:</label>
                         <select id="frac-input" name="fraction" required class="select-field">
-                            <option value="" disabled selected>-- ВЫБЕРИТЕ ИЗ СПИСКА --</option>
+                            <option value="" disabled selected>-- ДОСТУПНЫЕ ФРАКЦИИ --</option>
                             {fraction_options}
                         </select>
                     </div>
-                    <button type="button" class="btn btn-primary" style="width: 100%;" onclick="startQuiz()">Инициализировать тест</button>
+                    <button type="button" class="btn btn-primary" style="width: 100%;" onclick="startQuiz()">Начать прохождение</button>
                 </div>
                 
-                <!-- ТЕСТОВЫЕ И ПИСЬМЕННЫЕ ВОПРОСЫ (ГЕНЕРИРУЮТСЯ СКРИПТОМ) -->
                 {steps_html}
             </form>
         </div>
@@ -283,7 +362,7 @@ async def get_test_page():
                 const nick = document.getElementById('nick-input').value.trim();
                 const frac = document.getElementById('frac-input').value;
                 if(!nick || !frac) {{
-                    alert("ОШИБКА: Заполните все поля авторизации.");
+                    alert("КРИТИЧЕСКАЯ ОШИБКА: Заполните данные авторизации.");
                     return;
                 }}
                 document.getElementById('step-1').style.display = 'none';
@@ -291,21 +370,19 @@ async def get_test_page():
             }}
 
             function nextStep(currentStep) {{
-                // Проверка, выбран ли ответ на текущем тестовом шаге
                 const inputs = document.querySelectorAll(`#step-${{currentStep}} input[type="radio"]`);
                 if(inputs.length > 0) {{
                     let checked = false;
                     inputs.forEach(i => {{ if(i.checked) checked = true; }});
                     if(!checked) {{
-                        alert("СИСТЕМНОЕ УВЕДОМЛЕНИЕ: Выберите один из вариантов ответа.");
+                        alert("ВНИМАНИЕ: Выберите вариант ответа перед переходом.");
                         return;
                     }}
                 }}
                 
-                // Проверка, заполнен ли письменный ответ
                 const textarea = document.querySelector(`#step-${{currentStep}} textarea`);
-                if(textarea && textarea.value.trim().length < 20) {{
-                    alert("СИСТЕМНОЕ УВЕДОМЛЕНИЕ: Ваш ответ слишком короткий (минимум 20 символов для развернутого ответа).");
+                if(textarea && textarea.value.trim().length < 30) {{
+                    alert("ОШИБКА: Письменный ответ слишком короткий (минимум 30 подробных символов).");
                     return;
                 }}
 
@@ -332,7 +409,6 @@ async def handle_submit(
 ):
     end_time = time.time()
     duration_seconds = int(end_time - start_time)
-    
     minutes = duration_seconds // 60
     seconds = duration_seconds % 60
     time_str = f"{minutes} мин. {seconds} сек." if minutes > 0 else f"{seconds} сек."
@@ -348,45 +424,42 @@ async def handle_submit(
             
     score_percent = round((correct_count / total_choice) * 100)
     is_passed = score_percent >= PASS_SCORE_PERCENT
-    
-    status_style = "background: #052e16; color: #00ff66; border: 1px solid #14532d;" if is_passed else "background: #450a0a; color: #ef4444; border: 1px solid #7f1d1d;"
-    status_text = "🟢 ОДОБРЕНО (Тестовая часть пройдена)" if is_passed else "🔴 ОТКАЗАНО (Тестовая часть завалена)"
+    status_text = "🟢 УСПЕШНО (Тест сдан)" if is_passed else "🔴 ПРОВАЛЕН (Недостаточно баллов)"
 
-    # Формируем блок с письменными ответами для проверки лидером
-    written_answers_html = ""
+    # Генерируем лог для Telegram
+    tg_message = (
+        f"<b>📥 ПОСТУПИЛ НОВЫЙ ПРОТОКОЛ ТЕСТА</b>\n"
+        f"-------------------------------------\n"
+        f"👤 <b>Кандидат:</b> {nickname}\n"
+        f"🏢 <b>Фракция:</b> {fraction}\n"
+        f"⏱️ <b>Время прохождения:</b> {time_str}\n"
+        f"📊 <b>Результат тестов:</b> {correct_count} из {total_choice} ({score_percent}%)\n"
+        f"📜 <b>Вердикт:</b> {status_text}\n\n"
+        f"<b>📝 ПИСЬМЕННЫЕ ОТВЕТЫ КАНДИДАТА:</b>\n"
+    )
+
+    written_html = ""
     for q in TEXT_QUESTIONS:
         ans = form_data.get(f"q_{q['id']}", "Нет ответа")
-        written_answers_html += f"""
-        <div style="margin-top: 15px; padding: 12px; background: #14161f; border-left: 3px solid #ff4500; border-radius: 4px;">
-            <p style="margin: 0 0 8px 0; color: #ff4500; font-weight: bold;">Вопрос: {q['text']}</p>
-            <p style="margin: 0; color: #fff; font-style: italic;">Ответ: {ans}</p>
-        </div>
-        """
+        written_html += f"<div style='margin-bottom:15px; padding:10px; background:#101116; border-left:3px solid #ff4500;'><p style='color:#ff4500; margin:0;'><b>{q['text']}</b></p><p style='margin:5px 0 0 0; color:#fff;'><i>Ответ: {ans}</i></p></div>"
+        tg_message += f"\n❓ <i>{q['text']}</i>\n✍️ <b>Ответ:</b> {ans}\n"
+
+    # Отправляем лог в телеграм
+    await send_to_telegram(tg_message)
 
     result_html = f"""
     <!DOCTYPE html>
     <html>
-    <head><title>ПРОТОКОЛ ОБРАБОТАН</title><meta charset="utf-8"></head>
-    <body style="font-family: 'Courier New', monospace; background: #0a0a0f; color: #fff; padding: 40px 20px;">
-        <div style="max-width: 650px; margin: 40px auto; background: #0f1015; padding: 40px; border-radius: 4px; border: 2px solid #222530; box-shadow: 0 0 20px rgba(0,255,102,0.1);">
-            <h2 style="text-align: center; color: #ff4500; margin-top: 0; text-transform: uppercase; letter-spacing: 1px;">■ СИСТЕМНЫЙ РЕЗУЛЬТАТ ■</h2>
-            <hr style="border: 0; border-top: 2px dashed #222530; margin: 20px 0;">
-            
-            <div style="font-size: 15px; line-height: 1.8; color: #c4c9de;">
-                <p><b>[👤 КАНДИДАТ]:</b> <span style="color: #ff4500;">{nickname}</span></p>
-                <p><b>[🏢 СТРУКТУРА]:</b> {fraction}</p>
-                <p><b>[⏱️ ВРЕМЯ НА ОТВЕТЫ]:</b> {time_str}</p>
-                <p><b>[📊 ТЕСТОВЫЙ БАЛЛ]:</b> {correct_count} из {total_choice} ({score_percent}%)</p>
-            </div>
-            
-            <div style="margin-top: 25px; padding: 15px; border-radius: 4px; text-align: center; font-size: 16px; font-weight: bold; {status_style}">
-                {status_text}
-            </div>
-
-            <h3 style="color: #ff4500; margin-top: 35px; text-transform: uppercase; font-size: 15px;">■ БЛОК ПИСЬМЕННЫХ ОТВЕТОВ:</h3>
-            {written_answers_html}
-            
-            <p style="text-align: center; color: #6c738c; font-size: 12px; margin-top: 40px;">Данные сохранены в кэш-памяти сессии. Передайте протокол лидеру организации.</p>
+    <head><title>ПРОТОКОЛ ОТПРАВЛЕН</title><meta charset="utf-8"></head>
+    <body style="font-family: 'Courier New', monospace; background: #06060a; color: #fff; padding: 40px 20px;">
+        <div style="max-width: 650px; margin: 40px auto; background: #0b0c10; padding: 40px; border: 2px solid #1f222e;">
+            <h2 style="text-align: center; color: #00ff66;">■ ДАННЫЕ УСПЕШНО ЗАПИСАНЫ ■</h2>
+            <hr style="border:0; border-top:2px dashed #1f222e; margin:20px 0;">
+            <p>Ваш протокол тестирования сформирован и отправлен в базу данных следящего руководства.</p>
+            <p><b>Правильных ответов (тесты):</b> {correct_count} из {total_choice} ({score_percent}%)</p>
+            <h3 style="color:#ff4500;">Ваши письменные ответы сохранены для ручной проверки:</h3>
+            {written_html}
+            <p style="text-align:center; color:#6c738c; font-size:12px; margin-top:30px;">Вы можете закрыть эту страницу.</p>
         </div>
     </body>
     </html>
