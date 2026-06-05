@@ -141,14 +141,14 @@ TEXT_QUESTIONS = [
 PASS_SCORE_PERCENT = 80
 
 # === КОНФИГУРАЦИЯ ТЕЛЕГРАМА ===
-TG_TOKEN = "8731457824:AAHpYQiGSHakpMkoVoGFJQNbF3fe_rimxSU"
-TG_CHAT_ID = "8621189784"
+TG_TOKEN = 8731457824:AAHpYQiGSHakpMkoVoGFJQNbF3fe_rimxSU
+TG_CHAT_ID = 8621189784
 
 async def send_to_telegram(text: str):
     url = f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage"
     async with httpx.AsyncClient() as client:
         try:
-            await client.post(url, json={"chat_id": TG_CHAT_ID, "text": text, "parse_mode": "HTML"})
+            await client.post(url, json={"8621189784": 8731457824:AAHpYQiGSHakpMkoVoGFJQNbF3fe_rimxSU, "text": text, "parse_mode": "HTML"})
         except Exception as e:
             print(f"Ошибка отправки в ТГ: {e}")
 
