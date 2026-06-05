@@ -1,0 +1,161 @@
+import time
+import uvicorn
+from fastapi import FastAPI, Form, Request
+from fastapi.responses import HTMLResponse
+
+app = FastAPI()
+
+# Список фракций для выпадающего меню
+FRACTIONS = [
+    "МВД (Полиция)", 
+    "МЗ (Медики)", 
+    "МО (Армия)", 
+    "ФСБ", 
+    "Правительство", 
+    "МЧС", 
+    "ТРК (Ритм)", 
+    "ФСИН"
+]
+
+# Вопросы для теста
+QUESTIONS = [
+    {
+        "id": 1,
+        "text": "Каков минимальный игровой уровень для занятия поста заместителя?",
+        "options": ["5 уровень", "10 уровень", "15 уровень", "Нет ограничений"],
+        "correct": "10 уровень"
+    },
+    {
+        "id": 2,
+        "text": "Что обязан сделать заместитель при уходе со своего поста ПСЖ, если не отстоял минимальный срок?",
+        "options": ["Ничего", "Получить варн / бан", "Заплатить штраф администрации", "Просто уйти"],
+        "correct": "Получить варн / бан"
+    },
+    {
+        "id": 3,
+        "text": "Разрешено ли заместителю принимать людей во фракцию без электронного заявления или собеседования (блат)?",
+        "options": ["Да, если это друг", "Да, на усмотрение лидера", "Категорически запрещено", "Разрешено до 3 ранга"],
+        "correct": "Категорически запрещено"
+    }
+]
+
+PASS_SCORE_PERCENT = 75
+
+@app.get("/", response_class=HTMLResponse)
+async def get_test_page():
+    # Записываем точное время захода на страницу, чтобы передать его в форму
+    start_time = time.time()
+
+    # Генерируем опции для выбора фракции
+    fraction_options = "".join([f"<option value='{f}'>{f}</option>" for f in FRACTIONS])
+
+    # Генерируем HTML для вопросов
+    questions_html = ""
+    for q in QUESTIONS:
+        options_html = ""
+        for opt in q["options"]:
+            options_html += f"""
+            <label style="display:block; margin: 8px 0; cursor:pointer;">
+                <input type="radio" name="q_{q['id']}" value="{opt}" required> {opt}
+            </label>
+            """
+        questions_html += f"""
+        <div style="background: #f9f9f9; padding: 15px; margin-bottom: 20px; border-left: 5px solid #ff4500; border-radius: 4px;">
+            <p style="font-weight: bold; margin-top: 0;">{q['id']}. {q['text']}</p>
+            {options_html}
+        </div>
+        """
+
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Тестирование на пост Заместителя | Radmir RP</title>
+        <meta charset="utf-8">
+    </head>
+    <body style="font-family: Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 20px;">
+        <div style="max-width: 650px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+            <h2 style="color: #ff4500; text-align: center; margin-top: 0;">🔥 Тест на должность Заместителя (9)</h2>
+            <p style="text-align: center; color: #666;">Ответьте на вопросы честно. Удачи!</p>
+            <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+            
+            <form action="/submit" method="post">
+                <input type="hidden" name="start_time" value="{start_time}">
+
+                <label style="font-weight: bold;">👤 Ваш Никнейм (Имя_Фамилия):</label><br>
+                <input type="text" name="nickname" placeholder="Ivan_Ivanov" required style="width: 100%; padding: 10px; margin: 8px 0 20px 0; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;"><br>
+                
+                <label style="font-weight: bold;">🏢 Выберите вашу организацию:</label><br>
+                <select name="fraction" required style="width: 100%; padding: 10px; margin: 8px 0 20px 0; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; background: white;">
+                    <option value="" disabled selected>-- Выберите из списка --</option>
+                    {fraction_options}
+                </select><br><br>
+                
+                {questions_html}
+                
+                <button type="submit" style="width: 100%; background: #ff4500; color: white; padding: 14px; border: none; border-radius: 4px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px;">Отправить ответы</button>
+            </form>
+        </div>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)
+
+@app.post("/submit", response_class=HTMLResponse)
+async def handle_submit(
+    request: Request,
+    nickname: str = Form(...),
+    fraction: str = Form(...),
+    start_time: float = Form(...)
+):
+    # Вычисляем время прохождения
+    end_time = time.time()
+    duration_seconds = int(end_time - start_time)
+    
+    # Переводим секунды в минуты и секунды для красоты
+    minutes = duration_seconds // 60
+    seconds = duration_seconds % 60
+    time_str = f"{minutes} мин. {seconds} сек." if minutes > 0 else f"{seconds} сек."
+
+    # Проверка правильных ответов
+    form_data = await request.form()
+    correct_count = 0
+    total_questions = len(QUESTIONS)
+    
+    for q in QUESTIONS:
+        user_answer = form_data.get(f"q_{q['id']}")
+        if user_answer == q["correct"]:
+            correct_count += 1
+            
+    score_percent = round((correct_count / total_questions) * 100)
+    is_passed = score_percent >= PASS_SCORE_PERCENT
+    status_text = "🟢 СДАЛ" if is_passed else "🔴 НЕ СДАЛ"
+
+    # Выводим отчет прямо на экран
+    result_html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head><title>Результаты теста</title><meta charset="utf-8"></head>
+    <body style="font-family: Arial, sans-serif; background: #f0f2f5; padding: 40px 20px;">
+        <div style="max-width: 550px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); text-align: left;">
+            <h2 style="text-align: center; color: #333; margin-top: 0;">📑 Результаты тестирования</h2>
+            <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+            
+            <p style="font-size: 16px; margin: 10px 0;"><b>👤 Кандидат:</b> {nickname}</p>
+            <p style="font-size: 16px; margin: 10px 0;"><b>🏢 Организация:</b> {fraction}</p>
+            <p style="font-size: 16px; margin: 10px 0;"><b>⏱️ Время прохождения:</b> {time_str}</p>
+            <p style="font-size: 16px; margin: 10px 0;"><b>📊 Правильных ответов:</b> {correct_count} из {total_questions} ({score_percent}%)</p>
+            
+            <div style="margin-top: 25px; padding: 15px; background: #f9f9f9; border-radius: 6px; text-align: center; font-size: 18px; font-weight: bold;">
+                Вердикт: {status_text}
+            </div>
+            
+            <p style="text-align: center; color: #666; font-size: 13px; margin-top: 20px;">Данные успешно обработаны сервером.</p>
+        </div>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=result_html)
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="127.0.0.1", port=8000)
